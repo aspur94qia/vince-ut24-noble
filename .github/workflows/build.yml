@@ -7,18 +7,26 @@ jobs:
     timeout-minutes: 360
     steps:
       - name: Free Disk
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost && df -h
+
+      - name: Install Repo Tool Fixed
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
-          df -h
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          echo "$HOME/bin" >> $GITHUB_PATH
+
       - name: Install Deps
         run: |
           sudo apt update
-          sudo apt install -y git repo python3 python-is-python3 ccache android-tools-mkbootimg
+          sudo apt install -y git ccache python3 python-is-python3
+
       - name: Sync Halium 13
         run: |
           mkdir -p ~/halium && cd ~/halium
-          repo init -u https://github.com/Halium/android -b halium-13.0 --depth=1
-          repo sync -c -j$(nproc --all) --no-clone-bundle --no-tags
+          ~/bin/repo init -u https://github.com/Halium/android -b halium-13.0 --depth=1
+          ~/bin/repo sync -c -j$(nproc --all) --no-clone-bundle --no-tags
+
       - name: Clone Vince Trees
         run: |
           cd ~/halium
@@ -27,12 +35,14 @@ jobs:
           git clone https://github.com/LineageOS/android_device_xiaomi_msm8953-common -b lineage-20 device/xiaomi/msm8953-common
           git clone https://github.com/LineageOS/android_kernel_xiaomi_msm8953 -b lineage-20 kernel/xiaomi/msm8953
           git clone https://github.com/TheMuppets/proprietary_vendor_xiaomi -b lineage-20 vendor/xiaomi --depth=1
+
       - name: Build boot.img
         run: |
           cd ~/halium
           source build/envsetup.sh
           lunch lineage_vince-userdebug
           mka halium-boot -j$(nproc --all)
+
       - name: Upload boot.img
         uses: actions/upload-artifact@v4
         with:
