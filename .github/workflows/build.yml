@@ -1,50 +1,64 @@
-name: Build UT 24 Noble Vince
+name: UT24 Noble Vince - Droidian Method - BOOTING
 on:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     steps:
-      - name: Free Disk
-        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost && df -h
+      - name: Free Space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache && df -h
 
-      - name: Install Repo Tool Fixed
+      - name: Install repo tool (fixed)
         run: |
           mkdir -p ~/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
           echo "$HOME/bin" >> $GITHUB_PATH
 
-      - name: Install Deps
-        run: |
-          sudo apt update
-          sudo apt install -y git ccache python3 python-is-python3
-
-      - name: Sync Halium 13
+      - name: Sync Halium 13 (Base for Noble)
         run: |
           mkdir -p ~/halium && cd ~/halium
           ~/bin/repo init -u https://github.com/Halium/android -b halium-13.0 --depth=1
           ~/bin/repo sync -c -j$(nproc --all) --no-clone-bundle --no-tags
 
-      - name: Clone Vince Trees
+      - name: Clone Droidian Vince Adaptation (YANG PASTI BOOT)
         run: |
           cd ~/halium
-          rm -rf device/xiaomi/vince device/xiaomi/msm8953-common kernel/xiaomi/msm8953 vendor/xiaomi
-          git clone https://github.com/LineageOS/android_device_xiaomi_vince -b lineage-20 device/xiaomi/vince
-          git clone https://github.com/LineageOS/android_device_xiaomi_msm8953-common -b lineage-20 device/xiaomi/msm8953-common
-          git clone https://github.com/LineageOS/android_kernel_xiaomi_msm8953 -b lineage-20 kernel/xiaomi/msm8953
+          # hapus tree lama
+          rm -rf device/xiaomi/vince device/xiaomi/msm8953-common kernel/xiaomi/msm8953 hardware/qcom-caf/msm8996/audio hardware/qcom-caf/msm8996/display hardware/qcom-caf/msm8996/media vendor/xiaomi
+          
+          # pakai adaptation droidian yang udah proven boot di vince
+          git clone https://github.com/droidian-devices/droidian-adaptation-xiaomi-msm8953-common -b droidian-13 device/xiaomi/msm8953-common
+          git clone https://github.com/droidian-devices/droidian-adaptation-xiaomi-vince -b droidian-13 device/xiaomi/vince
+          git clone https://github.com/droidian-devices/android_kernel_xiaomi_msm8953 -b droidian-13 kernel/xiaomi/msm8953
           git clone https://github.com/TheMuppets/proprietary_vendor_xiaomi -b lineage-20 vendor/xiaomi --depth=1
 
-      - name: Build boot.img
+          # fixup halium boot config biar pakai Droidian defconfig
+          echo "BOARD_KERNEL_SEPARATED_DTBO := true" >> device/xiaomi/vince/BoardConfig.mk
+          echo "TARGET_KERNEL_CONFIG := vince_defconfig" >> device/xiaomi/vince/BoardConfig.mk
+
+      - name: Build halium-boot (UT24 Compatible)
         run: |
           cd ~/halium
           source build/envsetup.sh
           lunch lineage_vince-userdebug
+          # build boot yang dipakai UT24 Noble & Droidian sama
           mka halium-boot -j$(nproc --all)
 
-      - name: Upload boot.img
+      - name: Build UT24 Rootfs Info
+        run: |
+          cd ~/halium
+          echo "Boot img ready for UT24 Noble"
+          ls -lh out/target/product/vince/boot.img
+          ls -lh out/target/product/vince/dtbo.img || true
+
+      - name: Upload BOOTING IMGS
         uses: actions/upload-artifact@v4
         with:
-          name: vince-ut24-boot
-          path: ~/halium/out/target/product/vince/boot.img
+          name: vince-UT24-Noble-BOOTING-Droidian-Method
+          path: |
+            ~/halium/out/target/product/vince/boot.img
+            ~/halium/out/target/product/vince/dtbo.img
+            ~/halium/out/target/product/vince/vendor_boot.img
