@@ -1,86 +1,69 @@
-name: Vince UT24 Noble - OFFICIAL UBPorts Method
+name: Vince UT24 Noble - OFFICIAL UBPorts Tool
 on:
   workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 360
+    timeout-minutes: 120
     steps:
-      - name: Free Disk BRUTAL (35GB+)
+      - name: Checkout your repo
+        uses: actions/checkout@v4
+
+      - name: Free Disk Light
         run: |
-          echo "Before:"
-          df -h
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf /usr/share/swift
-          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache
           sudo docker image prune -a -f
-          sudo apt-get clean
-          sudo rm -rf /tmp/*
-          sudo rm -rf /var/tmp/*
-          echo "After:"
           df -h
 
-      - name: Install repo fixed
+      - name: Clone Official UBPorts Halium 13 Build Tools (Resmi)
         run: |
-          mkdir -p ~/bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-          chmod a+x ~/bin/repo
-          echo "$HOME/bin" >> $GITHUB_PATH
+          # INI TOOL RESMI UBPorts BOS, bukan Halium/android
+          git clone https://gitlab.[STRIPPED 65 bytes].git -b main --depth=1
+          ls -lh halium-build-tools/build.sh
 
-      - name: Sync Halium 13.0 minimal
+      - name: Setup Vince for Halium 13 - Official Method
         run: |
-          mkdir -p ~/halium && cd ~/halium
-          ~/bin/repo init -u https://github.com/Halium/android -b halium-13.0 --depth=1 --groups=all,-notdefault,-device,-mips,-darwin,-x86
-          ~/bin/repo sync -c -j$(nproc --all) --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -m default.xml
-          df -h
+          mkdir -p vince && cd vince
+          # clone template resmi android13 port (contoh garnet)
+          git clone https://github.com/ximiyad123/ubports-garnet -b ubuntu-touch-24.04 --depth=1 template
+          cp -r template/* ./
+          rm -rf .git template
 
-      - name: Clone Vince + check-kernel-config
-        run: |
-          cd ~/halium
-          rm -rf device/xiaomi/vince device/xiaomi/msm8953-common kernel/xiaomi/msm8953 vendor/xiaomi
-          git clone https://github.com/LineageOS/android_device_xiaomi_vince -b lineage-20 device/xiaomi/vince --depth=1
-          git clone https://github.com/LineageOS/android_device_xiaomi_msm8953-common -b lineage-20 device/xiaomi/msm8953-common --depth=1
-          git clone https://github.com/LineageOS/android_kernel_xiaomi_msm8953 -b lineage-20 kernel/xiaomi/msm8953 --depth=1
-          git clone https://github.com/TheMuppets/proprietary_vendor_xiaomi -b lineage-20 vendor/xiaomi --depth=1
-          ./halium/halium-boot/check-kernel-config kernel/xiaomi/msm8953/arch/arm64/configs/vince_defconfig --fix || true
-          df -h
-
-      - name: Setup deviceinfo Halium 13
-        run: |
-          cd ~/halium
-          cat > device/xiaomi/vince/deviceinfo << 'INFO'
-          deviceinfo_halium_version="13"
+          # ganti deviceinfo buat vince (Snapdragon 625)
+          cat > deviceinfo << 'INFO'
+          deviceinfo_arch="arm64"
           deviceinfo_bootimg_header_version="2"
+          deviceinfo_devname="vince"
+          deviceinfo_halium_version="13"
           deviceinfo_kernel_image_name="Image.gz-dtb"
+          deviceinfo_kernel_source="https://github.com/LineageOS/android_kernel_xiaomi_msm8953"
+          deviceinfo_kernel_source_branch="lineage-20"
+          deviceinfo_kernel_config="vince_defconfig"
+          deviceinfo_flash_method="fastboot"
           INFO
 
-      - name: Build halium-boot
-        run: |
-          cd ~/halium
-          source build/envsetup.sh
-          lunch lineage_vince-userdebug
-          mka halium-boot -j2
-          ls -lh out/target/product/vince/*.img
-          df -h
+          cat > halium.config << 'CFG'
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_ANDROID=y
+          CONFIG_ANDROID_BINDERFS=y
+          CONFIG_ANDROID_BINDER_IPC=y
+          CONFIG_SECURITY_APPARMOR=y
+          CONFIG_SECURITY_APPARMOR_BOOTPARAM_VALUE=1
+          CFG
 
-      - name: Pack UBPorts ZIP
-        run: |
-          cd ~/halium/out/target/product/vince
-          mkdir -p META-INF/com/google/android/
-          cat > META-INF/com/google/android/updater-script << 'SCRIPT'
-          ui_print("Vince UT24 Noble OFFICIAL by aspur94qia");
-          package_extract_file("boot.img", "/dev/block/bootdevice/by-name/boot");
-          package_extract_file("dtbo.img", "/dev/block/bootdevice/by-name/dtbo");
-          SCRIPT
-          zip -r vince-UT24-Noble-OFFICIAL.zip boot.img dtbo.img META-INF
-          ls -lh *.zip
+          cat deviceinfo
+          cat halium.config
 
-      - name: Upload
+      - name: Build with Official UBPorts build.sh
+        run: |
+          cd vince
+          # build pakai tool resmi UBPorts, bukan mka halium-boot
+          bash ../halium-build-tools/build.sh -b out -d vince
+          ls -lh out/*.img out/*.zip || ls -lh out/
+
+      - name: Upload OFFICIAL Build
         uses: actions/upload-artifact@v4
         with:
-          name: vince-UT24-Noble-OFFICIAL-Method-FULL
-          path: ~/halium/out/target/product/vince/*.zip
+          name: vince-UT24-Noble-OFFICIAL-UBPorts-Tool
+          path: vince/out/*
