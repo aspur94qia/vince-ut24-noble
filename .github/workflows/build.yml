@@ -1,64 +1,70 @@
-name: UT24 Noble Vince - Droidian Method - BOOTING
+name: Vince UT24 Noble - OFFICIAL UBPorts Method
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     steps:
-      - name: Free Space
-        run: sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache && df -h
+      - name: Free Disk
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc && df -h
 
-      - name: Install repo tool (fixed)
+      - name: Install repo fixed
         run: |
           mkdir -p ~/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
           echo "$HOME/bin" >> $GITHUB_PATH
 
-      - name: Sync Halium 13 (Base for Noble)
+      - name: Sync Halium 13.0
         run: |
           mkdir -p ~/halium && cd ~/halium
           ~/bin/repo init -u https://github.com/Halium/android -b halium-13.0 --depth=1
           ~/bin/repo sync -c -j$(nproc --all) --no-clone-bundle --no-tags
 
-      - name: Clone Droidian Vince Adaptation (YANG PASTI BOOT)
+      - name: Clone Vince + check-kernel-config
         run: |
           cd ~/halium
-          # hapus tree lama
-          rm -rf device/xiaomi/vince device/xiaomi/msm8953-common kernel/xiaomi/msm8953 hardware/qcom-caf/msm8996/audio hardware/qcom-caf/msm8996/display hardware/qcom-caf/msm8996/media vendor/xiaomi
-          
-          # pakai adaptation droidian yang udah proven boot di vince
-          git clone https://github.com/droidian-devices/droidian-adaptation-xiaomi-msm8953-common -b droidian-13 device/xiaomi/msm8953-common
-          git clone https://github.com/droidian-devices/droidian-adaptation-xiaomi-vince -b droidian-13 device/xiaomi/vince
-          git clone https://github.com/droidian-devices/android_kernel_xiaomi_msm8953 -b droidian-13 kernel/xiaomi/msm8953
+          rm -rf device/xiaomi/vince device/xiaomi/msm8953-common kernel/xiaomi/msm8953 vendor/xiaomi
+          git clone https://github.com/LineageOS/android_device_xiaomi_vince -b lineage-20 device/xiaomi/vince
+          git clone https://github.com/LineageOS/android_device_xiaomi_msm8953-common -b lineage-20 device/xiaomi/msm8953-common
+          git clone https://github.com/LineageOS/android_kernel_xiaomi_msm8953 -b lineage-20 kernel/xiaomi/msm8953
           git clone https://github.com/TheMuppets/proprietary_vendor_xiaomi -b lineage-20 vendor/xiaomi --depth=1
+          ./halium/halium-boot/check-kernel-config kernel/xiaomi/msm8953/arch/arm64/configs/vince_defconfig --fix || true
 
-          # fixup halium boot config biar pakai Droidian defconfig
-          echo "BOARD_KERNEL_SEPARATED_DTBO := true" >> device/xiaomi/vince/BoardConfig.mk
-          echo "TARGET_KERNEL_CONFIG := vince_defconfig" >> device/xiaomi/vince/BoardConfig.mk
+      - name: Setup deviceinfo Halium 13
+        run: |
+          cd ~/halium
+          cat > device/xiaomi/vince/deviceinfo << 'INFO'
+          deviceinfo_halium_version="13"
+          deviceinfo_bootimg_header_version="2"
+          deviceinfo_kernel_image_name="Image.gz-dtb"
+          deviceinfo_flash_method="fastboot"
+          INFO
+          cat device/xiaomi/vince/deviceinfo
 
-      - name: Build halium-boot (UT24 Compatible)
+      - name: Build halium-boot
         run: |
           cd ~/halium
           source build/envsetup.sh
           lunch lineage_vince-userdebug
-          # build boot yang dipakai UT24 Noble & Droidian sama
           mka halium-boot -j$(nproc --all)
+          ls -lh out/target/product/vince/*.img
 
-      - name: Build UT24 Rootfs Info
+      - name: Pack UBPorts ZIP like original vince but Noble
         run: |
-          cd ~/halium
-          echo "Boot img ready for UT24 Noble"
-          ls -lh out/target/product/vince/boot.img
-          ls -lh out/target/product/vince/dtbo.img || true
+          cd ~/halium/out/target/product/vince
+          mkdir -p META-INF/com/google/android/
+          cat > META-INF/com/google/android/updater-script << 'SCRIPT'
+          ui_print("Vince - UT24 Noble OFFICIAL Method by aspur94qia");
+          package_extract_file("boot.img", "/dev/block/bootdevice/by-name/boot");
+          package_extract_file("dtbo.img", "/dev/block/bootdevice/by-name/dtbo");
+          SCRIPT
+          zip -r vince-UT24-Noble-OFFICIAL.zip boot.img dtbo.img META-INF
+          ls -lh *.zip
 
-      - name: Upload BOOTING IMGS
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: vince-UT24-Noble-BOOTING-Droidian-Method
-          path: |
-            ~/halium/out/target/product/vince/boot.img
-            ~/halium/out/target/product/vince/dtbo.img
-            ~/halium/out/target/product/vince/vendor_boot.img
+          name: vince-UT24-Noble-OFFICIAL-Method-FULL
+          path: ~/halium/out/target/product/vince/*.zip
