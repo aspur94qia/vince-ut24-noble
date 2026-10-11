@@ -1,0 +1,40 @@
+name: Build UT 24 Noble Vince
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Free Disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          df -h
+      - name: Install Deps
+        run: |
+          sudo apt update
+          sudo apt install -y git repo python3 python-is-python3 ccache android-tools-mkbootimg
+      - name: Sync Halium 13
+        run: |
+          mkdir -p ~/halium && cd ~/halium
+          repo init -u https://github.com/Halium/android -b halium-13.0 --depth=1
+          repo sync -c -j$(nproc --all) --no-clone-bundle --no-tags
+      - name: Clone Vince Trees
+        run: |
+          cd ~/halium
+          rm -rf device/xiaomi/vince device/xiaomi/msm8953-common kernel/xiaomi/msm8953 vendor/xiaomi
+          git clone https://github.com/LineageOS/android_device_xiaomi_vince -b lineage-20 device/xiaomi/vince
+          git clone https://github.com/LineageOS/android_device_xiaomi_msm8953-common -b lineage-20 device/xiaomi/msm8953-common
+          git clone https://github.com/LineageOS/android_kernel_xiaomi_msm8953 -b lineage-20 kernel/xiaomi/msm8953
+          git clone https://github.com/TheMuppets/proprietary_vendor_xiaomi -b lineage-20 vendor/xiaomi --depth=1
+      - name: Build boot.img
+        run: |
+          cd ~/halium
+          source build/envsetup.sh
+          lunch lineage_vince-userdebug
+          mka halium-boot -j$(nproc --all)
+      - name: Upload boot.img
+        uses: actions/upload-artifact@v4
+        with:
+          name: vince-ut24-boot
+          path: ~/halium/out/target/product/vince/boot.img
